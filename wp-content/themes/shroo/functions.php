@@ -3,6 +3,8 @@
 include("Functions/Style_Theme/style_theme.php");
 include("Functions/Options/options-init.php");
 include("Functions/Options/category-options-init.php");
+include("Functions/Options/acf-offers.php") ;
+include("inc/wc-cart-bridge.php") ;
 
 // Fallback shim so theme templates don't fatally error when ACF is inactive
 if (! function_exists('get_field')) {
@@ -173,3 +175,4 @@ add_filter( 'template_include', function ( $template ) {
 add_filter( 'loop_shop_per_page', function ( $per_page ) {
     return isset( $_GET['wish'] ) ? -1 : $per_page;
 }, 20 );
+

@@ -456,3 +456,53 @@
     console.error('Init error:', err);
   }
 })();
+
+
+
+
+
+
+/* ===== حزم التوفير — صفحة المنتج =====
+   ملف مستقل: بيحدّث السعر وزرار "أضيفي للسلة" حسب الحزمة المختارة.
+   main.js بيقرا السعر والكمية من نفس الزرار، فمش محتاج يتعدل.
+*/
+(() => {
+  'use strict';
+  const box = document.getElementById('offers');
+  if (!box) return;
+
+  const addBtn = document.getElementById('add-main');
+  const qtyInput = document.getElementById('qty');
+  const priceBox = document.getElementById('p-price');
+  const baseSize = addBtn ? addBtn.dataset.size || '' : '';
+  // العملة: من data-currency (ووردبريس) أو ر.س افتراضياً (نسخة الـ HTML)
+  const currency = box.dataset.currency || 'ر.س';
+  const decimals = box.dataset.decimals !== undefined ? +box.dataset.decimals : null;
+  const money = n => {
+    const d = decimals !== null ? decimals : (n % 1 ? 2 : 0);
+    return (Math.round(n * 100) / 100).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: Math.max(d, 2) }) + ' ' + currency;
+  };
+
+  const sync = () => {
+    const radio = box.querySelector('input[name="offer"]:checked');
+    if (!radio) return;
+    const offer = radio.closest('.offer');
+    box.querySelectorAll('.offer').forEach(o => o.classList.toggle('active', o === offer));
+
+    const qty = +radio.dataset.qty, total = +radio.dataset.total, old = +radio.dataset.old;
+    const picks = [...offer.querySelectorAll('.opt-line select')].map((s, i) => `#${i + 1}: ${s.value}`);
+
+    if (qtyInput) qtyInput.value = qty;
+    if (addBtn) {
+      addBtn.dataset.price = Math.round(total / qty * 100) / 100; // سعر القطعة داخل الحزمة
+      addBtn.dataset.size = picks.length ? picks.join('، ') : baseSize;
+    }
+    if (priceBox) {
+      priceBox.innerHTML = `<strong>${money(total)}</strong>` +
+        (old > total ? `<s>${money(old)}</s><span class="save">وفّر ${Math.round((1 - total / old) * 100)}%</span>` : '');
+    }
+  };
+
+  box.addEventListener('change', sync);
+  sync();
+})();

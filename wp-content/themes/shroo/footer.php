@@ -200,6 +200,7 @@ $payment_url = $payment_image_id
         shippingFee: <?php echo json_encode( get_option( 'woocommerce_shipping_flat_cost', 25 ) ); ?>
       };
     </script>
+    <script src="<?php echo get_template_directory_uri(  ) . '/assets/js/wc-cart.js' ?>"></script>
     <?php wp_footer() ; ?>
   </body>
 </html>

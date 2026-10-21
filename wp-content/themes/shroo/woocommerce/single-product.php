@@ -47,6 +47,28 @@ if (is_wp_error($product_categories)) $product_categories = array();
 // Get product attributes
 $product_attributes = $product->get_attributes();
 
+// السمات الظاهرة (نوع البشرة، الفوائد...) مع قيمها — اللي ملهاش قيم مش بتظهر
+$attr_tabs = array();
+foreach ($product_attributes as $attr_name => $attr) {
+    if (strpos($attr_name, 'pa_') !== 0 || !$attr->get_visible()) continue;
+    $options = array();
+    if ($attr->is_taxonomy()) {
+        $terms = $attr->get_terms();
+        if (is_array($terms)) {
+            foreach ($terms as $term) {
+                $options[] = is_object($term) ? $term->name : $term;
+            }
+        }
+    } else {
+        $options = $attr->get_options();
+    }
+    if (empty($options)) continue;
+    $attr_tabs[str_replace('pa_', '', $attr_name)] = array(
+        'label'   => wc_attribute_label($attr_name),
+        'options' => $options,
+    );
+}
+
 // Get upsell products
 $upsells = $product->get_upsell_ids();
 
@@ -115,7 +137,21 @@ if (!empty($related_ids)) {
         <?php foreach ($product_attributes as $attr_name => $attr): ?>
           <?php if (strpos($attr_name, 'pa_') === 0 && $attr->get_visible()): ?>
             <p class="headline" id="p-<?php echo esc_attr(str_replace('pa_', '', $attr_name)); ?>">
-              <?php echo esc_html(implode(', ', $attr->get_text())); ?>
+              <?php
+              // For taxonomy attributes, use get_terms(); for text attributes, use get_options()
+              if ($attr->is_taxonomy()) {
+                  $terms = $attr->get_terms();
+                  $values = array();
+                  if (is_array($terms)) {
+                      foreach ($terms as $term) {
+                          $values[] = is_object($term) ? $term->name : $term;
+                      }
+                  }
+                  echo esc_html(implode(', ', $values));
+              } else {
+                  echo esc_html(implode(', ', $attr->get_options()));
+              }
+              ?>
             </p>
           <?php endif; ?>
         <?php endforeach; ?>
@@ -148,6 +184,64 @@ if (!empty($related_ids)) {
           <span class="save"><?php echo esc_html__('وفّر ' . $discount . '%', 'shroo'); ?></span>
         <?php endif; ?>
       </div>
+
+      <?php
+      // ---------- حزم التوفير (من ACF: حزم التوفير في صفحة تعديل المنتج) ----------
+      $bundle_offers = function_exists('shroo_get_bundle_offers') ? shroo_get_bundle_offers($product) : array();
+      if (!empty($bundle_offers)):
+          $offers_heading = get_field('offers_heading', $product_id) ?: 'اختاري حزمة التوفير';
+          $opts_label     = trim((string) get_field('offers_options_label', $product_id));
+          $opts_list      = array_filter(array_map('trim', preg_split('/\r\n|\r|\n/', (string) get_field('offers_options_list', $product_id))));
+          $currency       = html_entity_decode(get_woocommerce_currency_symbol(), ENT_QUOTES, 'UTF-8');
+      ?>
+      <!-- حزم التوفير -->
+      <div class="offers" id="offers" data-currency="<?php echo esc_attr($currency); ?>" data-decimals="<?php echo esc_attr(wc_get_price_decimals()); ?>">
+        <div class="offers-head">
+          <span class="offers-num">01</span>
+          <svg aria-hidden="true" class="ic ic-sparkle"><use href="#i-sparkle"></use></svg>
+          <h3><?php echo esc_html($offers_heading); ?></h3>
+          <span class="offers-line"></span>
+        </div>
+
+        <?php foreach ($bundle_offers as $i => $offer): ?>
+          <label class="offer">
+            <input type="radio" name="offer" value="<?php echo esc_attr($i + 1); ?>"
+              data-qty="<?php echo esc_attr($offer['qty']); ?>"
+              data-total="<?php echo esc_attr($offer['total']); ?>"
+              data-old="<?php echo esc_attr($offer['old']); ?>"
+              <?php checked($offer['is_default']); ?> />
+            <?php if ($offer['tag']): ?>
+              <span class="offer-tag"><?php echo esc_html($offer['tag']); ?></span>
+            <?php endif; ?>
+            <span class="offer-row">
+              <span class="offer-dot"></span>
+              <span class="offer-title"><?php echo esc_html($offer['title']); ?></span>
+              <span class="offer-price">
+                <strong><?php echo wp_kses_post(wc_price($offer['total'])); ?></strong>
+                <?php if ($offer['old'] > $offer['total']): ?>
+                  <s><?php echo wp_kses_post(wc_price($offer['old'])); ?></s>
+                <?php endif; ?>
+              </span>
+            </span>
+            <?php if ($opts_label && $opts_list): ?>
+              <span class="offer-opts">
+                <span class="opts-label"><?php echo esc_html($opts_label); ?></span>
+                <?php for ($n = 1; $n <= $offer['qty']; $n++): ?>
+                  <span class="opt-line">
+                    <b>#<?php echo esc_html($n); ?></b>
+                    <select aria-label="<?php echo esc_attr($opts_label . ' ' . $n); ?>">
+                      <?php foreach ($opts_list as $opt): ?>
+                        <option><?php echo esc_html($opt); ?></option>
+                      <?php endforeach; ?>
+                    </select>
+                  </span>
+                <?php endfor; ?>
+              </span>
+            <?php endif; ?>
+          </label>
+        <?php endforeach; ?>
+      </div>
+      <?php endif; ?>
       <div class="buy-row">
         <div class="qty">
           <button aria-label="زيادة" data-q="1">
@@ -204,15 +298,9 @@ if (!empty($related_ids)) {
   <!-- التبويبات -->
   <div class="tabs" role="tablist">
     <button class="active" data-tab="t-desc"><?php esc_html_e('الوصف', 'shroo'); ?></button>
-    <?php if (!empty($product_attributes)): ?>
-      <?php foreach ($product_attributes as $attr_name => $attr): ?>
-        <?php if (strpos($attr_name, 'pa_') === 0 && $attr->get_visible()): ?>
-          <button data-tab="t-<?php echo esc_attr(str_replace('pa_', '', $attr_name)); ?>">
-            <?php echo esc_html(wc_attribute_label($attr_name)); ?>
-          </button>
-        <?php endif; ?>
-      <?php endforeach; ?>
-    <?php endif; ?>
+    <?php foreach ($attr_tabs as $slug => $tab): ?>
+      <button data-tab="t-<?php echo esc_attr($slug); ?>"><?php echo esc_html($tab['label']); ?></button>
+    <?php endforeach; ?>
     <button data-tab="t-how"><?php esc_html_e('طريقة الاستخدام', 'shroo'); ?></button>
     <button data-tab="t-faq"><?php esc_html_e('الأسئلة الشائعة', 'shroo'); ?></button>
     <button data-tab="t-rev" id="p-reviews-tab">
@@ -227,39 +315,43 @@ if (!empty($related_ids)) {
         <h2><?php esc_html_e('وصف المنتج', 'shroo'); ?></h2>
         <p id="p-desc"><?php echo $full_desc ?: esc_html__('لا يوجد وصف متاح.', 'shroo'); ?></p>
       </div>
-      <?php if (!empty($product_attributes)): ?>
-        <?php foreach ($product_attributes as $attr_name => $attr): ?>
-          <?php if (strpos($attr_name, 'pa_') === 0 && $attr->get_visible()): ?>
-            <div class="ingr" id="t-<?php echo esc_attr(str_replace('pa_', '', $attr_name)); ?>">
-              <img alt="<?php echo esc_attr(wc_attribute_label($attr_name)); ?>" src="<?php echo esc_url($image_url); ?>" />
-              <ul>
-                <?php foreach ($attr->get_text() as $option): ?>
-                  <li>
-                    <svg aria-hidden="true" class="ic ic-check"><use href="#i-check"></use></svg>
-                    <div><b><?php echo esc_html($option); ?></b></div>
-                  </li>
-                <?php endforeach; ?>
-              </ul>
-            </div>
-          <?php endif; ?>
-        <?php endforeach; ?>
-      <?php else: ?>
-        <div class="ingr">
-          <img alt="رسم توضيحي للمنتج" src="<?php echo esc_url($image_url); ?>" />
-          <ul>
-            <li>
-              <svg aria-hidden="true" class="ic ic-check"><use href="#i-check"></use></svg>
-              <div><b><?php esc_html_e('جودة عالية', 'shroo'); ?></b><span><?php esc_html_e('مصنوع بمكونات فعّالة', 'shroo'); ?></span></div>
-            </li>
-            <li>
-              <svg aria-hidden="true" class="ic ic-check"><use href="#i-check"></use></svg>
-              <div><b><?php esc_html_e('نتائج مثبتة', 'shroo'); ?></b><span><?php esc_html_e('توترع على نتائج طبيعية', 'shroo'); ?></span></div>
-            </li>
-          </ul>
-        </div>
-      <?php endif; ?>
+      <div class="ingr">
+        <img alt="رسم توضيحي للمنتج" src="<?php echo esc_url($image_url); ?>" />
+        <ul>
+          <li>
+            <svg aria-hidden="true" class="ic ic-check"><use href="#i-check"></use></svg>
+            <div><b><?php esc_html_e('جودة عالية', 'shroo'); ?></b><span><?php esc_html_e('مصنوع بمكونات فعّالة', 'shroo'); ?></span></div>
+          </li>
+          <li>
+            <svg aria-hidden="true" class="ic ic-check"><use href="#i-check"></use></svg>
+            <div><b><?php esc_html_e('نتائج مثبتة', 'shroo'); ?></b><span><?php esc_html_e('توترع على نتائج طبيعية', 'shroo'); ?></span></div>
+          </li>
+        </ul>
+      </div>
     </div>
   </div>
+
+  <!-- Attribute Tabs (نوع البشرة، الفوائد...) -->
+  <?php foreach ($attr_tabs as $slug => $tab): ?>
+  <div class="tab-panel" hidden="" id="t-<?php echo esc_attr($slug); ?>">
+    <div class="desc-grid">
+      <div>
+        <h2><?php echo esc_html($tab['label']); ?></h2>
+      </div>
+      <div class="ingr">
+        <img alt="<?php echo esc_attr($tab['label']); ?>" src="<?php echo esc_url($image_url); ?>" />
+        <ul>
+          <?php foreach ($tab['options'] as $option): ?>
+            <li>
+              <svg aria-hidden="true" class="ic ic-check"><use href="#i-check"></use></svg>
+              <div><b><?php echo esc_html($option); ?></b></div>
+            </li>
+          <?php endforeach; ?>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <?php endforeach; ?>
 
   <!-- How to Use Tab -->
 <div class="tab-panel" hidden="" id="t-how">
