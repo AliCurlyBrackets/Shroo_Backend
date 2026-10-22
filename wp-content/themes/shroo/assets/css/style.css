@@ -80,7 +80,7 @@ section { position: relative; }
 .search input:focus { border-color: var(--primary); }
 .search button { position: absolute; inset-inline-end: 12px; top: 10px; }
 .search .ic { width: 20px; height: 20px; }
-.h-icons { display: flex; align-items: center; gap: 18px; }
+.h-icons { display: flex; align-items: flex-start; gap: 18px; }
 .h-icons .ic { width: 24px; height: 24px; }
 .h-icons a:hover, .cart-btn:hover { color: var(--primary); }
 .cart-btn { position: relative; display: flex; }
